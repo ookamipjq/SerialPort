@@ -6,9 +6,19 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    /****************************/
+    Chart_Init();
+
+    s_timer = new QTimer();
+    rec_timer = new QTimer();
+    connect(s_timer,SIGNAL(timeout()),this,SLOT(DrawLine()));
+ //   connect(s_timer,SIGNAL(TimeOut()),this,SLOT(TimeOut()));
+
+    /****************************/
     QStringList serialPortName;
     Serialport =new  QSerialPort(this);
     connect(Serialport,SIGNAL(readyRead()),this,SLOT(serialportread()));
+    connect(rec_timer,SIGNAL(timeout()),this,SLOT(TimeRead()));
     foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts()) {
         serialPortName<<info.portName();
     }
@@ -22,11 +32,82 @@ MainWindow::~MainWindow()
 
 void MainWindow::serialportread()
 {
-    QString buf;
-    buf = QString(Serialport->readAll());
-    ui->rec_Edit->appendPlainText(buf);
+    rec_timer->start(100);
+    buf.append( Serialport->readAll());
+
+    bool ok;
+    buf1 = buf.toInt(&ok,10);
+
 }
 
+void MainWindow::TimeRead()
+{
+    rec_timer->stop();
+    if (buf.length() != 0)
+    {
+        ui->rec_Edit->appendPlainText(buf);
+    }
+    buf.clear();
+}
+
+
+void MainWindow::TimeOut()
+{
+
+}
+
+void MainWindow::Chart_Init()
+{
+    chart = new QChart();
+    splineserives = new QSplineSeries(this);
+    splineserives->setName("绘图");
+
+    chart->addSeries(splineserives);
+    QValueAxis *axisX = new QValueAxis();
+    QValueAxis *axisY = new QValueAxis();
+
+    axisX->setMin(0);
+    axisX->setMax(MAX_X);
+    axisY->setMin(-50);
+    axisY->setMax(MAX_Y);
+    /*
+    axisX->setRange(0,10);
+    axisY->setRange(0,65);
+*/
+    axisX->setTickCount(5);
+    axisY->setTickCount(1);
+
+    QFont font("Microsoft YaHei",8,QFont::Normal);
+    axisX->setTitleFont(font);
+    axisY->setTitleFont(font);
+    axisX->setTitleText("X-Test");
+    axisY->setTitleText("Y-Test");
+    chart->addAxis(axisX,Qt::AlignBottom);
+    chart->addAxis(axisY,Qt::AlignLeft);
+
+    splineserives->attachAxis(axisX);
+    splineserives->attachAxis(axisY);
+    ui->graphicsView->setChart(chart);
+    ui->graphicsView->setRenderHint(QPainter::Antialiasing);
+}
+
+void MainWindow::DrawLine()
+{
+//    qreal x =plotArea().width()/axisX-tickCount();
+
+
+    static int count = 0;
+    if(count > MAX_X)
+    {
+        splineserives->removePoints(0,splineserives->count() - MAX_X);
+        chart->axisX()->setMin(count - MAX_X);
+        chart->axisX()->setMax(count);
+    }
+//    splineserives->append(count,rand()%65);
+    splineserives->append(count,buf1);
+    count++;
+
+}
 void MainWindow::on_cont_B_clicked()
 {
     QSerialPort::DataBits Data_Bits;
@@ -59,7 +140,10 @@ void MainWindow::on_cont_B_clicked()
     Serialport->setStopBits(Stop_Bits);
     Serialport->setBaudRate(Baud_Bits);
     if(Serialport->open(QIODevice::ReadWrite) == true)
+    {
         QMessageBox::information(this,"提示","連接成功");
+        s_timer->start(100);
+    }
     else
         QMessageBox::information(this,"提示","連接失敗");
 }
@@ -68,6 +152,7 @@ void MainWindow::on_cont_B_clicked()
 void MainWindow::on_Close_B_clicked()
 {
     Serialport->close();
+    s_timer->stop();
     QMessageBox::information(this,"提示","連接已斷開");
 }
 
